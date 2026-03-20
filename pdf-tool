@@ -105,6 +105,16 @@ shell_rc_path() {
 ensure_launcher_path() {
   local target_dir rc_path export_line path_present=0
   target_dir="$(dirname -- "$(launcher_target)")"
+  if [[ "$target_dir" == "/usr/local/bin" ]]; then
+    case ":$PATH:" in
+      *":$target_dir:"*)
+        echo "==> Launcher directory already on PATH in this shell: $target_dir"
+        return 0
+        ;;
+    esac
+    echo "==> Launcher installed to $target_dir"
+    return 0
+  fi
   rc_path="$(shell_rc_path)"
   export_line="export PATH=\"$target_dir:\$PATH\""
 
@@ -135,7 +145,7 @@ install_launcher_link() {
   target_dir="$(dirname -- "$target")"
 
   mkdir -p "$target_dir"
-  ln -sfn "$SCRIPT_PATH" "$target"
+  install -m 0755 "$SCRIPT_PATH" "$target"
   echo "==> Installed launcher: $target"
   ensure_launcher_path
 }
