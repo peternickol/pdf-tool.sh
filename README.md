@@ -1,23 +1,23 @@
-# pdf-tools.sh
+# pdf-tool.sh
 
-`pdf-tools.sh` is a small collection of bash-first PDF utilities.
+`pdf-tool` is a small bash-first PDF utility.
 
-The goal is to keep these tools:
+The goal is to keep it:
 - simple
 - dependency-light
 - easy to run on a normal workstation
 - built on proven system tools instead of custom PDF libraries
 
-Current tools:
-- `doc-to-pdf.sh`
+Current commands:
+- `pdf-tool convert`
   Convert office documents to PDF and merge the result.
-- `flatten-pdf-links.sh`
+- `pdf-tool flatten`
   Re-distill PDFs so interactive links are no longer clickable.
 
 ## Design
 
 This project intentionally stays small:
-- bash scripts only
+- bash only
 - system packages for heavy lifting
 - no Python package stack
 - no local service or database
@@ -25,70 +25,56 @@ This project intentionally stays small:
 
 ## Install
 
-Clone the repo and run each tool's explicit setup path when needed.
+Clone the repo and run setup:
 
 ```bash
-git clone git@github.com:peternickol/pdf-tools.sh.git
-cd pdf-tools.sh
+git clone git@github.com:peternickol/pdf-tool.sh.git
+cd pdf-tool.sh
+bash pdf-tool --setup
 ```
 
-Bootstrap the document conversion tool:
+`--setup` does three things:
+- installs system prerequisites
+- installs a launcher symlink into:
+  - `/usr/local/bin` when writable
+  - otherwise `~/.local/bin`
+- appends that launcher directory to your shell startup file if needed
+
+After that, new shells should be able to run:
 
 ```bash
-bash doc-to-pdf.sh --setup
+pdf-tool --help
+pdf-tool convert ./docs
+pdf-tool flatten ./docs
 ```
-
-Bootstrap the PDF flattening tool:
-
-```bash
-bash flatten-pdf-links.sh --setup
-```
-
-Each `--setup` also installs a launcher symlink into:
-- `/usr/local/bin` when writable
-- otherwise `~/.local/bin`
-
-If that launcher directory is not already on `PATH`, setup appends the matching
-export line to your shell startup file.
 
 ### What `--setup` installs
 
-`doc-to-pdf.sh --setup`
-- Debian: `libreoffice` and `poppler-utils`
-- macOS: `LibreOffice` and `poppler`
+On Debian:
+- `libreoffice`
+- `poppler-utils`
+- `ghostscript`
 
-`flatten-pdf-links.sh --setup`
-- Debian: `ghostscript`
-- macOS: `ghostscript`
+On macOS:
+- `LibreOffice`
+- `poppler`
+- `ghostscript`
 
-If the platform is unsupported, the scripts stop and tell you what to install manually.
+If the platform is unsupported, `pdf-tool --setup` stops and tells you what to install manually.
 
-## Tool: `doc-to-pdf.sh`
+## Command: `pdf-tool convert`
 
 Convert `.doc`, `.docx`, and `.odt` files from one directory into PDFs, then merge the PDFs into a single output file.
 
 By default it also copies any PDFs already present in that same source directory into the output directory before the merge step.
 
-### Requirements
-
-- `soffice`
-- `pdfunite`
-
 ### Usage
 
 ```bash
-bash doc-to-pdf.sh [options]
-bash doc-to-pdf.sh --setup
+pdf-tool convert <dir> [options]
 ```
 
 ### Options
-
-- `--setup`
-  Install system prerequisites for this tool.
-
-- `--root-dir PATH`
-  Directory to scan for `.doc`, `.docx`, and `.odt` files.
-  Default: `.`
 
 - `--output-dir PATH`
   Directory where generated PDFs and the merged PDF will be written.
@@ -107,60 +93,34 @@ bash doc-to-pdf.sh --setup
 
 ### Examples
 
-Convert documents from the current directory and merge them:
-
 ```bash
-bash doc-to-pdf.sh
-```
-
-Convert documents from a specific folder:
-
-```bash
-bash doc-to-pdf.sh --root-dir ./docs
-```
-
-Write output somewhere else with a custom merged filename:
-
-```bash
-bash doc-to-pdf.sh --output-dir ./build/pdf --merged-name combined.pdf
-```
-
-Merge only PDFs generated from office documents in this run:
-
-```bash
-bash doc-to-pdf.sh --docs-only
+pdf-tool convert ./docs
+pdf-tool convert ./docs --output-dir ./build/pdf --merged-name combined.pdf
+pdf-tool convert ./docs --docs-only
 ```
 
 ### Notes
 
-- This tool scans only the top level of `--root-dir`. It does not recurse into subdirectories.
+- This command scans only the top level of the source directory. It does not recurse into subdirectories.
 - LibreOffice conversion quality depends on the source document and LibreOffice itself.
 - Existing PDFs in the source directory are copied into the output directory unless `--docs-only` is used.
 
-## Tool: `flatten-pdf-links.sh`
+## Command: `pdf-tool flatten`
 
 Walk a directory tree, find PDFs, and rewrite them so interactive links are no longer clickable.
 
 This works by re-distilling each PDF through Ghostscript's PDF writer. The result is a new PDF that preserves visible page content while flattening interactive annotations such as clickable links.
 
-By default this tool overwrites the original PDFs after successful conversion.
+By default this command overwrites the original PDFs after successful conversion.
 Use `--copy` when you want sibling output files instead.
-
-### Requirements
-
-- `gs`
 
 ### Usage
 
 ```bash
-bash flatten-pdf-links.sh <root-dir> [options]
-bash flatten-pdf-links.sh --setup
+pdf-tool flatten <dir> [options]
 ```
 
 ### Options
-
-- `--setup`
-  Install system prerequisites for this tool.
 
 - `--copy`
   Write sibling files instead of overwriting originals.
@@ -174,31 +134,19 @@ bash flatten-pdf-links.sh --setup
 
 ### Examples
 
-Overwrite PDFs in place:
-
 ```bash
-bash flatten-pdf-links.sh ./docs
-```
-
-Write sibling copy files instead:
-
-```bash
-bash flatten-pdf-links.sh ./docs --copy
-```
-
-Use a different suffix for copy mode:
-
-```bash
-bash flatten-pdf-links.sh ./docs --copy --suffix -print
+pdf-tool flatten ./docs
+pdf-tool flatten ./docs --copy
+pdf-tool flatten ./docs --copy --suffix -print
 ```
 
 ### Notes
 
-- This tool recurses through the full directory tree under the root you provide.
+- This command recurses through the full directory tree under the root you provide.
 - By default it overwrites the original PDFs.
 - Use `--copy` when you want sibling files like `example-flat.pdf`.
 - Re-distilling a PDF can change file size and may slightly alter internal PDF structure even when the pages look the same.
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](/home/pan/temp/pdf-tools.sh/LICENSE).
+This project is released under the MIT License. See LICENSE.

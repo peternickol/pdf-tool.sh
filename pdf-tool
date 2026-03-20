@@ -1,0 +1,389 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SOURCE_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE_PATH" ]]; do
+  LINK_DIR="$(cd -- "$(dirname -- "$SOURCE_PATH")" && pwd)"
+  SOURCE_PATH="$(readlink -- "$SOURCE_PATH")"
+  [[ "$SOURCE_PATH" != /* ]] && SOURCE_PATH="$LINK_DIR/$SOURCE_PATH"
+done
+SCRIPT_PATH="$(cd -- "$(dirname -- "$SOURCE_PATH")" && pwd)/$(basename -- "$SOURCE_PATH")"
+
+VERSION="0.1.0"
+SUBCOMMAND="${1:-help}"
+
+CONVERT_ROOT_DIR="."
+CONVERT_OUTPUT_DIR="./pdf_output"
+CONVERT_MERGED_NAME="OUTPUT-final_pdf_file.pdf"
+CONVERT_INCLUDE_EXISTING_PDFS=1
+
+FLATTEN_ROOT_DIR=""
+FLATTEN_IN_PLACE=1
+FLATTEN_SUFFIX="-flat"
+
+usage() {
+  cat <<EOF2
+Usage: pdf-tool <command> [options]
+       pdf-tool --setup
+
+Commands:
+  convert <dir> [options]    Convert office documents to PDF and merge the result
+  flatten <dir> [options]    Flatten PDFs so interactive links are not clickable
+
+Setup:
+  --setup                    Install prerequisites and install the pdf-tool launcher
+
+General:
+  --help                     Show this help text
+  --version                  Show version information
+
+Examples:
+  pdf-tool --setup
+  pdf-tool convert ./docs
+  pdf-tool convert ./docs --output-dir ./build/pdf --merged-name combined.pdf
+  pdf-tool flatten ./docs
+  pdf-tool flatten ./docs --copy --suffix -print
+EOF2
+}
+
+convert_usage() {
+  cat <<EOF2
+Usage: pdf-tool convert <dir> [options]
+
+Convert .doc, .docx, and .odt files in a directory to PDF and optionally merge
+existing PDFs from that same directory into one output file.
+
+Options:
+  --output-dir PATH          Directory to write generated PDFs (default: ./pdf_output)
+  --merged-name NAME.pdf     Name for the merged PDF inside output-dir
+                             (default: OUTPUT-final_pdf_file.pdf)
+  --docs-only                Only merge PDFs generated from documents in this run
+  --help                     Show this help text
+EOF2
+}
+
+flatten_usage() {
+  cat <<EOF2
+Usage: pdf-tool flatten <dir> [options]
+
+Recursively walk <dir> and rewrite PDFs so interactive links are no longer
+clickable.
+
+Options:
+  --copy                     Write sibling files instead of overwriting originals
+  --suffix TEXT              Suffix for copy mode output files (default: -flat)
+  --help                     Show this help text
+EOF2
+}
+
+require_bin() {
+  local name="$1"
+  if ! command -v "$name" >/dev/null 2>&1; then
+    echo "Required command not found: $name" >&2
+    exit 1
+  fi
+}
+
+launcher_target() {
+  if [[ -w /usr/local/bin ]]; then
+    printf '%s' "/usr/local/bin/pdf-tool"
+  else
+    printf '%s' "$HOME/.local/bin/pdf-tool"
+  fi
+}
+
+shell_rc_path() {
+  if [[ -n "${BASH_VERSION:-}" ]]; then
+    printf '%s' "$HOME/.bashrc"
+  elif [[ -n "${ZSH_VERSION:-}" ]]; then
+    printf '%s' "$HOME/.zshrc"
+  else
+    printf '%s' "$HOME/.profile"
+  fi
+}
+
+ensure_launcher_path() {
+  local target_dir rc_path export_line path_present=0
+  target_dir="$(dirname -- "$(launcher_target)")"
+  rc_path="$(shell_rc_path)"
+  export_line="export PATH=\"$target_dir:\$PATH\""
+
+  case ":$PATH:" in
+    *":$target_dir:"*)
+      path_present=1
+      ;;
+  esac
+
+  touch "$rc_path"
+  if grep -Fqx "$export_line" "$rc_path"; then
+    echo "==> PATH export already present in $rc_path"
+  else
+    printf '\n# Added by pdf-tool.sh setup\n%s\n' "$export_line" >> "$rc_path"
+    echo "==> Added launcher PATH to $rc_path"
+  fi
+
+  if [[ $path_present -eq 1 ]]; then
+    echo "==> Launcher directory already on PATH in this shell: $target_dir"
+  else
+    echo "==> Open a new shell or run: source $rc_path"
+  fi
+}
+
+install_launcher_link() {
+  local target target_dir
+  target="$(launcher_target)"
+  target_dir="$(dirname -- "$target")"
+
+  mkdir -p "$target_dir"
+  ln -sfn "$SCRIPT_PATH" "$target"
+  echo "==> Installed launcher: $target"
+  ensure_launcher_path
+}
+
+is_macos() {
+  [[ "$(uname -s)" == "Darwin" ]]
+}
+
+is_debian_like() {
+  [[ -f /etc/debian_version ]]
+}
+
+setup_prereqs() {
+  local need_soffice=0
+  local need_pdfunite=0
+  local need_gs=0
+
+  command -v soffice >/dev/null 2>&1 || need_soffice=1
+  command -v pdfunite >/dev/null 2>&1 || need_pdfunite=1
+  command -v gs >/dev/null 2>&1 || need_gs=1
+
+  if [[ $need_soffice -eq 0 && $need_pdfunite -eq 0 && $need_gs -eq 0 ]]; then
+    echo "==> All prerequisites already installed"
+    install_launcher_link
+    return 0
+  fi
+
+  if is_debian_like; then
+    echo "==> Installing PDF tool prerequisites"
+    sudo apt-get update
+    sudo apt-get install -y libreoffice poppler-utils ghostscript
+    install_launcher_link
+    return 0
+  fi
+
+  if is_macos; then
+    require_bin brew
+    if [[ $need_pdfunite -eq 1 ]]; then
+      echo "==> Installing poppler"
+      brew install poppler
+    fi
+    if [[ $need_gs -eq 1 ]]; then
+      echo "==> Installing ghostscript"
+      brew install ghostscript
+    fi
+    if [[ $need_soffice -eq 1 ]]; then
+      echo "==> Installing LibreOffice"
+      brew install --cask libreoffice
+    fi
+    install_launcher_link
+    return 0
+  fi
+
+  echo "Unsupported platform for --setup. Install LibreOffice, pdfunite, and Ghostscript manually." >&2
+  exit 1
+}
+
+flatten_pdf_file() {
+  local input_pdf="$1"
+  local output_pdf="$2"
+  local temp_pdf
+
+  temp_pdf="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX.pdf")"
+  trap 'rm -f "$temp_pdf"' RETURN
+
+  gs \
+    -q \
+    -dBATCH \
+    -dNOPAUSE \
+    -dSAFER \
+    -sDEVICE=pdfwrite \
+    -dCompatibilityLevel=1.4 \
+    -o "$temp_pdf" \
+    "$input_pdf"
+
+  mv "$temp_pdf" "$output_pdf"
+  trap - RETURN
+}
+
+run_convert() {
+  require_bin soffice
+  require_bin pdfunite
+
+  if [[ ! -d "$CONVERT_ROOT_DIR" ]]; then
+    echo "Directory not found: $CONVERT_ROOT_DIR" >&2
+    exit 1
+  fi
+
+  mkdir -p "$CONVERT_OUTPUT_DIR"
+
+  mapfile -d '' DOC_FILES < <(find "$CONVERT_ROOT_DIR" -maxdepth 1 -type f \( -iname '*.doc' -o -iname '*.docx' -o -iname '*.odt' \) -print0 | sort -z)
+
+  if [[ ${#DOC_FILES[@]} -gt 0 ]]; then
+    echo "==> Converting office documents from $CONVERT_ROOT_DIR"
+    soffice --headless --convert-to pdf "${DOC_FILES[@]}" --outdir "$CONVERT_OUTPUT_DIR"
+  else
+    echo "==> No office documents found in $CONVERT_ROOT_DIR"
+  fi
+
+  if [[ "$CONVERT_INCLUDE_EXISTING_PDFS" -eq 1 ]]; then
+    mapfile -d '' SOURCE_PDFS < <(find "$CONVERT_ROOT_DIR" -maxdepth 1 -type f -iname '*.pdf' -print0 | sort -z)
+    for input_pdf in "${SOURCE_PDFS[@]}"; do
+      target_pdf="$CONVERT_OUTPUT_DIR/$(basename "$input_pdf")"
+      if [[ "$input_pdf" != "$target_pdf" ]]; then
+        cp -f "$input_pdf" "$target_pdf"
+        echo "==> Copied $(basename "$input_pdf")"
+      fi
+    done
+  fi
+
+  mapfile -d '' OUTPUT_PDFS < <(find "$CONVERT_OUTPUT_DIR" -maxdepth 1 -type f -iname '*.pdf' ! -iname "$CONVERT_MERGED_NAME" -print0 | sort -z)
+
+  if [[ ${#OUTPUT_PDFS[@]} -eq 0 ]]; then
+    echo "No PDFs available to merge in $CONVERT_OUTPUT_DIR" >&2
+    exit 1
+  fi
+
+  echo "==> Merging PDFs into $CONVERT_OUTPUT_DIR/$CONVERT_MERGED_NAME"
+  pdfunite "${OUTPUT_PDFS[@]}" "$CONVERT_OUTPUT_DIR/$CONVERT_MERGED_NAME"
+
+  echo "==> Done"
+  echo "==> Wrote $CONVERT_OUTPUT_DIR/$CONVERT_MERGED_NAME"
+}
+
+run_flatten() {
+  require_bin gs
+
+  if [[ -z "$FLATTEN_ROOT_DIR" ]]; then
+    flatten_usage >&2
+    exit 1
+  fi
+
+  if [[ ! -d "$FLATTEN_ROOT_DIR" ]]; then
+    echo "Directory not found: $FLATTEN_ROOT_DIR" >&2
+    exit 1
+  fi
+
+  count=0
+  while IFS= read -r -d '' input_pdf; do
+    if [[ "$FLATTEN_IN_PLACE" -eq 0 ]]; then
+      output_pdf="${input_pdf%.pdf}${FLATTEN_SUFFIX}.pdf"
+    else
+      output_pdf="${input_pdf}.tmp-flattened.pdf"
+    fi
+
+    echo "==> Flattening $input_pdf"
+    flatten_pdf_file "$input_pdf" "$output_pdf"
+
+    if [[ "$FLATTEN_IN_PLACE" -eq 0 ]]; then
+      echo "==> Wrote $output_pdf"
+    else
+      mv "$output_pdf" "$input_pdf"
+      echo "==> Replaced $input_pdf"
+    fi
+
+    count=$((count + 1))
+  done < <(find "$FLATTEN_ROOT_DIR" -type f \( -iname '*.pdf' \) -print0 | sort -z)
+
+  echo "==> Done"
+  echo "==> Processed $count PDF(s)"
+}
+
+case "$SUBCOMMAND" in
+  --setup)
+    setup_prereqs
+    ;;
+  --help|help|-h)
+    usage
+    ;;
+  --version|version|-V)
+    printf 'pdf-tool v%s\n' "$VERSION"
+    ;;
+  convert)
+    shift
+    while (($# > 0)); do
+      case "$1" in
+        --output-dir)
+          [[ $# -ge 2 ]] || { echo "--output-dir requires a value" >&2; convert_usage >&2; exit 1; }
+          CONVERT_OUTPUT_DIR="$2"
+          shift
+          ;;
+        --merged-name)
+          [[ $# -ge 2 ]] || { echo "--merged-name requires a value" >&2; convert_usage >&2; exit 1; }
+          CONVERT_MERGED_NAME="$2"
+          shift
+          ;;
+        --docs-only)
+          CONVERT_INCLUDE_EXISTING_PDFS=0
+          ;;
+        --help)
+          convert_usage
+          exit 0
+          ;;
+        -*)
+          echo "Unknown option: $1" >&2
+          convert_usage >&2
+          exit 1
+          ;;
+        *)
+          if [[ "$CONVERT_ROOT_DIR" != "." ]]; then
+            echo "Only one convert directory may be provided" >&2
+            convert_usage >&2
+            exit 1
+          fi
+          CONVERT_ROOT_DIR="$1"
+          ;;
+      esac
+      shift
+    done
+    run_convert
+    ;;
+  flatten)
+    shift
+    while (($# > 0)); do
+      case "$1" in
+        --copy)
+          FLATTEN_IN_PLACE=0
+          ;;
+        --suffix)
+          [[ $# -ge 2 ]] || { echo "--suffix requires a value" >&2; flatten_usage >&2; exit 1; }
+          FLATTEN_SUFFIX="$2"
+          shift
+          ;;
+        --help)
+          flatten_usage
+          exit 0
+          ;;
+        -*)
+          echo "Unknown option: $1" >&2
+          flatten_usage >&2
+          exit 1
+          ;;
+        *)
+          if [[ -n "$FLATTEN_ROOT_DIR" ]]; then
+            echo "Only one flatten directory may be provided" >&2
+            flatten_usage >&2
+            exit 1
+          fi
+          FLATTEN_ROOT_DIR="$1"
+          ;;
+      esac
+      shift
+    done
+    run_flatten
+    ;;
+  *)
+    echo "Unknown command: $SUBCOMMAND" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
