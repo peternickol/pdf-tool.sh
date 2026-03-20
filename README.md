@@ -12,7 +12,7 @@ Current commands:
 - `pdf-tool convert`
   Convert office documents to PDF and merge the result.
 - `pdf-tool flatten`
-  Rasterize and rebuild PDFs so interactive links are no longer clickable.
+  Rebuild PDFs through Poppler so interactive links are no longer clickable.
 
 ## Design
 
@@ -120,7 +120,7 @@ pdf-tool convert ./docs --docs-only
 
 Walk a directory tree, find PDFs, and rewrite them so interactive links are no longer clickable.
 
-This works by rasterizing each page to an image and rebuilding the PDF from those page images. It is a more brute-force approach, but it reliably removes clickable annotations like hyperlinks.
+This works by rebuilding each PDF through `pdftocairo -pdf`. The goal is to preserve the visible page output while dropping interactive annotations like clickable links.
 
 By default this command overwrites the original PDFs after successful conversion.
 Use `--copy` when you want sibling output files instead.
@@ -156,8 +156,8 @@ pdf-tool flatten ./docs --copy --suffix -print
 - This command recurses through the full directory tree under the root you provide.
 - By default it overwrites the original PDFs.
 - Use `--copy` when you want sibling files like `example-flat.pdf`.
-- This command rasterizes pages and rebuilds the PDF, so text search, text selection, and vector fidelity may be lost.
-- File size and output quality can change depending on the source PDF.
+- Rebuilding a PDF can change file size or internal structure even when the pages look the same.
+- If a particular PDF still keeps live links after rebuilding, that file may need a more brute-force image-based workflow.
 
 ## License
 

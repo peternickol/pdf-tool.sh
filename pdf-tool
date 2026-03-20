@@ -207,35 +207,22 @@ setup_prereqs() {
 flatten_pdf_file() {
   local input_pdf="$1"
   local output_pdf="$2"
-  local temp_dir temp_pdf
-  local -a rendered_pages
+  local temp_base temp_pdf
 
-  require_bin pdftoppm
-  temp_pdf="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX.pdf")"
-  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/flatten-pdf-pages.XXXXXX")"
-  trap 'rm -f "$temp_pdf"; rm -rf "$temp_dir"' RETURN
+  require_bin pdftocairo
+  temp_base="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX")"
+  temp_pdf="${temp_base}.pdf"
+  trap 'rm -f "$temp_base" "$temp_pdf"' RETURN
 
-  pdftoppm -png -r 200 "$input_pdf" "$temp_dir/page" >/dev/null
-  mapfile -t rendered_pages < <(find "$temp_dir" -maxdepth 1 -type f -name 'page-*.png' | sort)
+  pdftocairo -pdf -origpagesizes "$input_pdf" "$temp_base"
 
-  if [[ ${#rendered_pages[@]} -eq 0 ]]; then
-    echo "Failed to rasterize PDF: $input_pdf" >&2
+  if [[ ! -f "$temp_pdf" ]]; then
+    echo "Failed to rebuild PDF: $input_pdf" >&2
     exit 1
   fi
 
-  gs \
-    -q \
-    -dBATCH \
-    -dNOPAUSE \
-    -dSAFER \
-    -sDEVICE=pdfwrite \
-    -dCompatibilityLevel=1.4 \
-    -o "$temp_pdf" \
-    "${rendered_pages[@]}"
-
   mv "$temp_pdf" "$output_pdf"
   trap - RETURN
-  rm -rf "$temp_dir"
 }
 
 run_convert() {
