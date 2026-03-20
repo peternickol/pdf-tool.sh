@@ -202,4 +202,3 @@ bash flatten-pdf-links.sh ./docs --copy --suffix -print
 ## License
 
 This project is released under the MIT License. See [LICENSE](/home/pan/temp/pdf-tools.sh/LICENSE).
-# pdf-tool.sh
