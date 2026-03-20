@@ -218,14 +218,13 @@ setup_prereqs() {
 flatten_pdf_file() {
   local input_pdf="$1"
   local output_pdf="$2"
-  local temp_base temp_pdf
+  local temp_pdf
 
   require_bin pdftocairo
-  temp_base="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX")"
-  temp_pdf="${temp_base}.pdf"
-  trap 'rm -f "$temp_base" "$temp_pdf"' RETURN
+  temp_pdf="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX")"
+  trap 'rm -f "$temp_pdf"' RETURN
 
-  pdftocairo -pdf -origpagesizes "$input_pdf" "$temp_base"
+  pdftocairo -pdf -origpagesizes "$input_pdf" "$temp_pdf"
 
   if [[ ! -f "$temp_pdf" ]]; then
     echo "Failed to rebuild PDF: $input_pdf" >&2
