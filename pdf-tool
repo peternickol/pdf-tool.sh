@@ -158,6 +158,9 @@ install_launcher_link() {
   target_dir="$(dirname -- "$target")"
 
   mkdir -p "$target_dir"
+  if [[ -L "$target" || -f "$target" ]]; then
+    rm -f "$target"
+  fi
   install -m 0755 "$SCRIPT_PATH" "$target"
   echo "==> Installed launcher: $target"
   ensure_launcher_path
