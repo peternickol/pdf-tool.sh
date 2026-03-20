@@ -153,7 +153,7 @@ ensure_launcher_path() {
 }
 
 install_launcher_link() {
-  local target target_dir
+  local target target_dir staged_script
   target="$(launcher_target)"
   target_dir="$(dirname -- "$target")"
 
@@ -161,7 +161,12 @@ install_launcher_link() {
   if [[ -L "$target" || -f "$target" ]]; then
     rm -f "$target"
   fi
-  install -m 0755 "$SCRIPT_PATH" "$target"
+  staged_script="$(mktemp "${TMPDIR:-/tmp}/pdf-tool.XXXXXX")"
+  trap 'rm -f "$staged_script"' RETURN
+  cp "$SCRIPT_PATH" "$staged_script"
+  install -m 0755 "$staged_script" "$target"
+  trap - RETURN
+  rm -f "$staged_script"
   echo "==> Installed launcher: $target"
   ensure_launcher_path
 }
