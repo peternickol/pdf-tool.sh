@@ -12,7 +12,7 @@ Current commands:
 - `pdf-tool convert`
   Convert office documents to PDF and merge the result.
 - `pdf-tool flatten`
-  Re-distill PDFs so interactive links are no longer clickable.
+  Rasterize and rebuild PDFs so interactive links are no longer clickable.
 
 ## Design
 
@@ -120,7 +120,7 @@ pdf-tool convert ./docs --docs-only
 
 Walk a directory tree, find PDFs, and rewrite them so interactive links are no longer clickable.
 
-This works by re-distilling each PDF through Ghostscript's PDF writer. The result is a new PDF that preserves visible page content while flattening interactive annotations such as clickable links.
+This works by rasterizing each page to an image and rebuilding the PDF from those page images. It is a more brute-force approach, but it reliably removes clickable annotations like hyperlinks.
 
 By default this command overwrites the original PDFs after successful conversion.
 Use `--copy` when you want sibling output files instead.
@@ -156,7 +156,8 @@ pdf-tool flatten ./docs --copy --suffix -print
 - This command recurses through the full directory tree under the root you provide.
 - By default it overwrites the original PDFs.
 - Use `--copy` when you want sibling files like `example-flat.pdf`.
-- Re-distilling a PDF can change file size and may slightly alter internal PDF structure even when the pages look the same.
+- This command rasterizes pages and rebuilds the PDF, so text search, text selection, and vector fidelity may be lost.
+- File size and output quality can change depending on the source PDF.
 
 ## License
 

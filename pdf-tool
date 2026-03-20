@@ -178,13 +178,15 @@ is_debian_like() {
 setup_prereqs() {
   local need_soffice=0
   local need_pdfunite=0
+  local need_pdftoppm=0
   local need_gs=0
 
   command -v soffice >/dev/null 2>&1 || need_soffice=1
   command -v pdfunite >/dev/null 2>&1 || need_pdfunite=1
+  command -v pdftoppm >/dev/null 2>&1 || need_pdftoppm=1
   command -v gs >/dev/null 2>&1 || need_gs=1
 
-  if [[ $need_soffice -eq 0 && $need_pdfunite -eq 0 && $need_gs -eq 0 ]]; then
+  if [[ $need_soffice -eq 0 && $need_pdfunite -eq 0 && $need_pdftoppm -eq 0 && $need_gs -eq 0 ]]; then
     echo "==> All prerequisites already installed"
     install_launcher_link
     return 0
@@ -205,10 +207,21 @@ setup_prereqs() {
 flatten_pdf_file() {
   local input_pdf="$1"
   local output_pdf="$2"
-  local temp_pdf
+  local temp_dir temp_pdf
+  local -a rendered_pages
 
+  require_bin pdftoppm
   temp_pdf="$(mktemp "${TMPDIR:-/tmp}/flatten-pdf.XXXXXX.pdf")"
-  trap 'rm -f "$temp_pdf"' RETURN
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/flatten-pdf-pages.XXXXXX")"
+  trap 'rm -f "$temp_pdf"; rm -rf "$temp_dir"' RETURN
+
+  pdftoppm -png -r 200 "$input_pdf" "$temp_dir/page" >/dev/null
+  mapfile -t rendered_pages < <(find "$temp_dir" -maxdepth 1 -type f -name 'page-*.png' | sort)
+
+  if [[ ${#rendered_pages[@]} -eq 0 ]]; then
+    echo "Failed to rasterize PDF: $input_pdf" >&2
+    exit 1
+  fi
 
   gs \
     -q \
@@ -218,10 +231,11 @@ flatten_pdf_file() {
     -sDEVICE=pdfwrite \
     -dCompatibilityLevel=1.4 \
     -o "$temp_pdf" \
-    "$input_pdf"
+    "${rendered_pages[@]}"
 
   mv "$temp_pdf" "$output_pdf"
   trap - RETURN
+  rm -rf "$temp_dir"
 }
 
 run_convert() {
