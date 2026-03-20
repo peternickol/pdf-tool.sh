@@ -126,16 +126,27 @@ shell_rc_path() {
 ensure_launcher_path() {
   local target_dir rc_path export_line path_present=0
   target_dir="$(dirname -- "$(launcher_target)")"
+
+  if [[ "$target_dir" == "/usr/local/bin" ]]; then
+    case ":$PATH:" in
+      *":$target_dir:"*)
+        echo "==> Launcher directory already on PATH in this shell: $target_dir"
+        ;;
+      *)
+        echo "==> Installed global launcher in $target_dir"
+        ;;
+    esac
+    return 0
+  fi
+
   rc_path="$(shell_rc_path)"
   export_line="export PATH=\"$target_dir:\$PATH\""
 
-  if [[ -z "${SUDO_USER:-}" || "${SUDO_USER}" == "root" ]]; then
-    case ":$PATH:" in
-      *":$target_dir:"*)
-        path_present=1
-        ;;
-    esac
-  fi
+  case ":$PATH:" in
+    *":$target_dir:"*)
+      path_present=1
+      ;;
+  esac
 
   touch "$rc_path"
   if grep -Fqx "$export_line" "$rc_path"; then
