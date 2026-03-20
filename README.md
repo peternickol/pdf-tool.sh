@@ -1,4 +1,4 @@
-# pdf-tool.sh
+# pdf-tool
 
 `pdf-tool` is a small bash-first PDF utility.
 
@@ -25,12 +25,16 @@ This project intentionally stays small:
 
 ## Install
 
-Clone the repo and run setup:
+Install `pdf-tool` with the direct download method:
 
 ```bash
-git clone git@github.com:peternickol/pdf-tool.sh.git
-cd pdf-tool.sh
-bash pdf-tool --setup
+curl -fsSL https://raw.githubusercontent.com/peternickol/pdf-tool.sh/master/pdf-tool -o pdf-tool && sudo bash pdf-tool --setup && rm pdf-tool
+```
+
+Force reinstall with the latest public script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/peternickol/pdf-tool.sh/master/pdf-tool -o pdf-tool && sudo bash pdf-tool --setup && rm pdf-tool
 ```
 
 `--setup` does three things:
@@ -61,6 +65,16 @@ On macOS:
 - `ghostscript`
 
 If the platform is unsupported, `pdf-tool --setup` stops and tells you what to install manually.
+
+### Development
+
+If you are working on the tool itself, then a git checkout still makes sense:
+
+```bash
+git clone git@github.com:peternickol/pdf-tool.sh.git
+cd pdf-tool.sh
+bash pdf-tool --setup
+```
 
 ## Command: `pdf-tool convert`
 
