@@ -39,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/peternickol/pdf-tool.sh/master/pdf-
 
 `--setup` does three things:
 - installs system prerequisites
-- installs a launcher symlink into:
+- installs a launcher into:
   - `/usr/local/bin` when writable
   - otherwise `~/.local/bin`
 - appends that launcher directory to your shell startup file if needed
@@ -54,17 +54,14 @@ pdf-tool flatten ./docs
 
 ### What `--setup` installs
 
-On Debian:
+Automatic setup is intended for Debian and Ubuntu style systems.
+
+On Debian/Ubuntu:
 - `libreoffice`
 - `poppler-utils`
 - `ghostscript`
 
-On macOS:
-- `LibreOffice`
-- `poppler`
-- `ghostscript`
-
-If the platform is unsupported, `pdf-tool --setup` stops and tells you what to install manually.
+On other platforms, `pdf-tool --setup` stops and tells you what to install manually.
 
 ### Development
 

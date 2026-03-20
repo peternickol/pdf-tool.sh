@@ -171,10 +171,6 @@ install_launcher_link() {
   ensure_launcher_path
 }
 
-is_macos() {
-  [[ "$(uname -s)" == "Darwin" ]]
-}
-
 is_debian_like() {
   [[ -f /etc/debian_version ]]
 }
@@ -198,24 +194,6 @@ setup_prereqs() {
     echo "==> Installing PDF tool prerequisites"
     sudo apt-get update
     sudo apt-get install -y libreoffice poppler-utils ghostscript
-    install_launcher_link
-    return 0
-  fi
-
-  if is_macos; then
-    require_bin brew
-    if [[ $need_pdfunite -eq 1 ]]; then
-      echo "==> Installing poppler"
-      brew install poppler
-    fi
-    if [[ $need_gs -eq 1 ]]; then
-      echo "==> Installing ghostscript"
-      brew install ghostscript
-    fi
-    if [[ $need_soffice -eq 1 ]]; then
-      echo "==> Installing LibreOffice"
-      brew install --cask libreoffice
-    fi
     install_launcher_link
     return 0
   fi
