@@ -92,37 +92,50 @@ launcher_target() {
   fi
 }
 
-shell_rc_path() {
-  if [[ -n "${BASH_VERSION:-}" ]]; then
-    printf '%s' "$HOME/.bashrc"
-  elif [[ -n "${ZSH_VERSION:-}" ]]; then
-    printf '%s' "$HOME/.zshrc"
+target_user_home() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    getent passwd "$SUDO_USER" | cut -d: -f6
   else
-    printf '%s' "$HOME/.profile"
+    printf '%s' "$HOME"
+  fi
+}
+
+target_user_shell() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    getent passwd "$SUDO_USER" | cut -d: -f7
+  else
+    printf '%s' "${SHELL:-/bin/bash}"
+  fi
+}
+
+shell_rc_path() {
+  local user_home user_shell shell_name
+  user_home="$(target_user_home)"
+  user_shell="$(target_user_shell)"
+  shell_name="$(basename -- "$user_shell")"
+
+  if [[ "$shell_name" == "bash" ]]; then
+    printf '%s' "$user_home/.bashrc"
+  elif [[ "$shell_name" == "zsh" ]]; then
+    printf '%s' "$user_home/.zshrc"
+  else
+    printf '%s' "$user_home/.profile"
   fi
 }
 
 ensure_launcher_path() {
   local target_dir rc_path export_line path_present=0
   target_dir="$(dirname -- "$(launcher_target)")"
-  if [[ "$target_dir" == "/usr/local/bin" ]]; then
-    case ":$PATH:" in
-      *":$target_dir:"*)
-        echo "==> Launcher directory already on PATH in this shell: $target_dir"
-        return 0
-        ;;
-    esac
-    echo "==> Launcher installed to $target_dir"
-    return 0
-  fi
   rc_path="$(shell_rc_path)"
   export_line="export PATH=\"$target_dir:\$PATH\""
 
-  case ":$PATH:" in
-    *":$target_dir:"*)
-      path_present=1
-      ;;
-  esac
+  if [[ -z "${SUDO_USER:-}" || "${SUDO_USER}" == "root" ]]; then
+    case ":$PATH:" in
+      *":$target_dir:"*)
+        path_present=1
+        ;;
+    esac
+  fi
 
   touch "$rc_path"
   if grep -Fqx "$export_line" "$rc_path"; then
